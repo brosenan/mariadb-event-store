@@ -82,7 +82,7 @@ ORDER BY ts DESC
  * All events related to a given type and key.
  */
 CREATE VIEW IF NOT EXISTS related_events AS
-SELECT association.tp1, events_with_bodies.keyhash, events_with_bodies.id, events_with_bodies.ts, events_with_bodies.content
+SELECT association.tp1, events_with_bodies.*
 FROM events_with_bodies, association
 WHERE events_with_bodies.tp = association.tp2
 ORDER BY ts DESC
