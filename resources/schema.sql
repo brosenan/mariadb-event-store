@@ -105,8 +105,8 @@ CREATE PROCEDURE IF NOT EXISTS compaction (IN now BIGINT)
 BEGIN
 DELETE FROM events
 WHERE CONCAT(tp, ":", keyhash, ":", bodyhash) IN (SELECT CONCAT(tp, ":", keyhash, ":", bodyhash)
-              	 	  	        FROM accum_state
-					WHERE cnt = 0);
+                                                  FROM accum_state
+                                                  WHERE cnt = 0);
 DELETE FROM events
 WHERE ttl < now;
 END
