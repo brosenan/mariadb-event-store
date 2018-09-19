@@ -95,7 +95,7 @@ GROUP BY tp, keyhash, bodyhash
 CREATE PROCEDURE IF NOT EXISTS compaction (IN now BIGINT)
 BEGIN
 DELETE FROM events
-WHERE CONCAT(tp, keyhash, bodyhash) IN (SELECT CONCAT(tp, keyhash, bodyhash)
+WHERE CONCAT(tp, ":", keyhash, ":", bodyhash) IN (SELECT CONCAT(tp, ":", keyhash, ":", bodyhash)
               	 	  	        FROM accum_state
 					WHERE cnt = 0);
 DELETE FROM events
