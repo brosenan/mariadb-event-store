@@ -71,11 +71,20 @@ SELECT event_id, content FROM small_event_bodies
 /*
  * All events related to a given type and key.
  */
+CREATE VIEW IF NOT EXISTS events_with_bodies AS
+SELECT events.tp, events.keyhash, events.id, events.ts, all_bodies.content
+FROM events, all_bodies
+WHERE events.id = all_bodies.event_id
+ORDER BY ts DESC
+//
+
+/*
+ * All events related to a given type and key.
+ */
 CREATE VIEW IF NOT EXISTS related_events AS
-SELECT association.tp1, events.keyhash, events.id, events.ts, all_bodies.content
-FROM events, association, all_bodies
-WHERE events.tp = association.tp2
-AND events.id = all_bodies.event_id
+SELECT association.tp1, events_with_bodies.keyhash, events_with_bodies.id, events_with_bodies.ts, events_with_bodies.content
+FROM events_with_bodies, association
+WHERE events_with_bodies.tp = association.tp2
 ORDER BY ts DESC
 //
 
