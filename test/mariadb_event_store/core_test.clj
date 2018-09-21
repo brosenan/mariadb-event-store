@@ -80,6 +80,9 @@
 (defn to-bytes [str]
   (.getBytes str))
 
+(defn from-bytes [bytes]
+  (-> bytes String. read-string))
+
 (def my-domain
   (reify EventDomain
     (id [this ev]
@@ -104,7 +107,7 @@
       ;; Obviously, not the best way to do this...
       (-> ev pr-str to-bytes))
     (deserialize [this ser]
-      (-> ser String. read-string))))
+      (from-bytes ser))))
 
 ;; To easily construct events within this domain, we define the
 ;; `event` function:
@@ -256,3 +259,48 @@
     (jdbc/insert-multi! {:datasource the-datasource} :small_event_bodies [:event_id :content]
                         [["id-short" small-content]]) => irrelevant)))
 
+;; # Event Retrieval
+
+;; The `.get` method takes a type ane a key, and retrieves all events
+;; under them (from the specified replica). It retrieves events dating
+;; from the specified timestamp and up, and omits events for which the
+;; TTL is below the specified current time.
+
+;; `.get` needs to work with `.scanKeys`, and need to agree with it on
+;; how keys are represented. In this implementation, for the purpose
+;; of `.scanKeys` and `.get`, the keys are represented _using their
+;; hashes_.
+(fact
+ (let [keyhash (.getBytes "the key hash")
+       bin1 (.getBytes "some-binary-1")
+       bin2 (.getBytes "some-binary-2")]
+   (.get my-event-store "mytype" keyhash 2 1000 2000) => [..event1.. ..event2..]
+   (provided
+    (es/hash-to-shard keyhash 2) => 1
+    (jdbc/query {:datasource the-datasource}
+                ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+    => [{:content bin1}
+        {:content bin2}]
+    (from-bytes bin1) => ..event1..
+    (from-bytes bin2) => ..event2..)))
+
+;; The `.getRelated` method takes an event and returns all _related_
+;; events, i.e., events of associated types with the same key.
+(fact
+ (let [key (.getBytes "key")
+       keyhash (.getBytes "keyhash")
+       bin1 (.getBytes "some-binary-1")
+       bin2 (.getBytes "some-binary-2")]
+   (.getRelated my-event-store (event "id" "type" "key" 1 "body") 2 1000 2000) => [..event1.. ..event2..]
+   (provided
+    ;; Determine the shard
+    (to-bytes "key") => key
+    (sha256/sha256-bytes key) => keyhash
+    (es/hash-to-shard keyhash 2) => 1
+    ;; Make the query
+    (jdbc/query {:datasource the-datasource}
+                ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+    => [{:content bin1}
+        {:content bin2}]
+    (from-bytes bin1) => ..event1..
+    (from-bytes bin2) => ..event2..)))

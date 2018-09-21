@@ -82,7 +82,23 @@
                                         (filter #(>= (alength (second %)) 256)))))
           (jdbc/insert-multi! @ds :small_event_bodies [:event_id :content]
                               (vec (->> content-records
-                                        (filter #(< (alength (second %)) 256))))))))))
+                                        (filter #(< (alength (second %)) 256)))))))
+      (get [this type key replica since now]
+        (let [shard (hash-to-shard key (:num-shards state))
+              ds (-> state :data-sources (get [shard replica]))]
+          (->> (jdbc/query @ds
+                           ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
+               (map :content)
+               (map #(.deserialize domain %)))))
+      (getRelated [this ev replica since now]
+        (let [shard (-> (.key domain ev)
+                        (sha256/sha256-bytes)
+                        (hash-to-shard (:num-shards state)))
+              ds (-> state :data-sources (get [shard replica]))]
+          (->> (jdbc/query @ds
+                           ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
+               (map :content)
+               (map #(.deserialize domain %))))))))
 
 
 
