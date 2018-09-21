@@ -23,10 +23,29 @@
                        '[(ns main-test
                            (:use midje.sweet)
                            (:import (injectthedriver DriverFactory)
-                                    (axiom.event_store EventStoreService)))
+                                    (axiom.event_store EventStoreService
+                                                       EventDomain)))
+                         (def ess (DriverFactory/createDriverFor EventStoreService))
+                         (def domain
+                           (reify EventDomain))
+                         (def es (.createEventStore ess domain))
                          (fact
-                          (DriverFactory/createDriverFor EventStoreService))])
-                      (lk/update-container :test lku/inject-driver EventStoreService event-store))))))
+                          (.numShards es) => 2
+                          (.replicationFactor es) => 3)])
+                      (lk/update-container :test lku/inject-driver EventStoreService event-store)
+                      ;; For the purpose of the test, we need to
+                      ;; provide persistent volumes to be used by the
+                      ;; database instances.
+                      (update :$additional concat
+                              (for [i (range 6)]
+                                {:kind :PersistentVolume
+                                 :apiVersion :v1
+                                 :metadata {:name (str "store-and-get-vol" i)
+                                            :labels {:type :local}}
+                                 :spec {:storageClassName :standard
+                                        :capacity {:storage "200Mi"}
+                                        :accessModes ["ReadWriteOnce"]
+                                        :hostPath {:path (str "/mnt/data" i)}}})))))))
 
 (fact
  :kube
