@@ -5,7 +5,8 @@
             [clojure.java.jdbc :as jdbc]
             [pandect.algo.sha256 :as sha256])
   (:import (axiom.event_store EventStore
-                              EventDomain))
+                              EventDomain)
+           (java.io IOException))
   (:gen-class
    :name mariadb_event_store.EventStoreService
    :implements [axiom.event_store.EventStoreService]
@@ -356,3 +357,94 @@
                  ["DELETE FROM events WHERE tp = ?" "old-type"]) => irrelevant))
 
 
+;; # Error Handling
+
+;; Every database access can go wrong, throwing an exception. The
+;; interface requires throwing an `IOException` if anything goes
+;; wrong. Here we simulate these scenarios.
+
+;; The `.associate` method makes an insertion to the database, which
+;; can fail.
+(fact
+ (.associate my-event-store "foo" "bar" 1 2) => (throws IOException)
+ (provided
+  (jdbc/insert-multi! {:datasource the-datasource} :association [:tp1 :tp2]
+                      [["foo" "bar"]
+                       ["bar" "foo"]]) =throws=> (Exception. "something went wrong")))
+
+;; The `.getAssociation` method makes a query.
+(fact
+ (.getAssociation my-event-store "foo" 1 2) => (throws IOException)
+ (provided
+  (jdbc/query {:datasource the-datasource} ["SELECT tp2 FROM association WHERE tp1 = ?" "foo"])
+  =throws=> (Exception. "something went wrong")))
+
+;; `.store` makes multiple insertions.
+(fact
+ (let [key-bytes (.getBytes "key")
+       events (to-array [(event "id1" "type1" "key" 1 "body1")
+                         (event "id2" "type2" "key" 1 "body2")])
+       ;; Arbitrary short and long binary arrays
+       small-content (-> (range 3) pr-str .getBytes)
+       big-content (-> (range 300) pr-str .getBytes)]
+   (.store my-event-store events 2 1000) => (throws IOException)
+   (provided
+    (to-bytes "key") => key-bytes
+    (sha256/sha256-bytes key-bytes) => ..keyhash..
+    (es/hash-to-shard ..keyhash.. 2) => 1
+    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/event-content-records my-domain events) => [["id-short" small-content]
+                                                    ["id-long" big-content]]
+    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
+                        ..records..) =throws=> (Exception. "something went wrong"))))
+
+;; `.get` and `.getRelated` each make queries.
+(fact
+ (let [keyhash (.getBytes "the key hash")
+       bin1 (.getBytes "some-binary-1")
+       bin2 (.getBytes "some-binary-2")]
+   (.get my-event-store "mytype" keyhash 2 1000 2000) => (throws IOException)
+   (provided
+    (es/hash-to-shard keyhash 2) => 1
+    (jdbc/query {:datasource the-datasource}
+                ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+    =throws=> (Exception. "something went wrong"))))
+
+(fact
+ (let [key (.getBytes "key")
+       keyhash (.getBytes "keyhash")
+       bin1 (.getBytes "some-binary-1")
+       bin2 (.getBytes "some-binary-2")]
+   (.getRelated my-event-store (event "id" "type" "key" 1 "body") 2 1000 2000) => (throws IOException)
+   (provided
+    ;; Determine the shard
+    (to-bytes "key") => key
+    (sha256/sha256-bytes key) => keyhash
+    (es/hash-to-shard keyhash 2) => 1
+    ;; Make the query
+    (jdbc/query {:datasource the-datasource}
+                ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+    =throws=> (Exception. "something went wrong"))))
+
+;; `.scanKeys` makes a query.
+(fact
+ (.scanKeys my-event-store 1 2) => (throws IOException)
+ (provided
+  (jdbc/query {:datasource the-datasource}
+              ["SELECT DISTINCT keyhash FROM events"])
+  =throws=> (Exception. "something went wrong")))
+
+;; `.maintenance` calls a stored procedure.
+(fact
+ (.maintenance my-event-store 1 2 2000) => (throws IOException)
+ (provided
+  (jdbc/execute! {:datasource the-datasource}
+                 ["CALL compaction(?)" 2000]) =throws=> (Exception. "something went wrong")))
+
+;; `.pruneType` makes two deletions.
+(fact
+ (.pruneType my-event-store "old-type" 1 2) => (throws IOException)
+ (provided
+  (jdbc/execute! {:datasource the-datasource}
+                 ["DELETE FROM association WHERE tp1 = ? OR tp2 = ?" "old-type" "old-type"])
+  =throws=> (Exception. "something went wrong")))

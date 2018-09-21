@@ -3,7 +3,8 @@
             [hikari-cp.core :as hcp]
             [clojure.java.jdbc :as jdbc]
             [pandect.algo.sha256 :as sha256])
-  (:import (axiom.event_store EventStore)))
+  (:import (axiom.event_store EventStore)
+           (java.io IOException)))
 
 (defn -init [props]
   (let [num-shards (.get props "num-shards")
@@ -60,57 +61,81 @@
       (replicationFactor [this]
         (:num-replicas state))
       (associate [this type1 type2 shard replica]
-        (let [ds (-> state :data-sources (get [shard replica]))]
-          (jdbc/insert-multi! @ds :association [:tp1 :tp2]
-                              [[type1 type2]
-                               [type2 type1]])))
+        (try
+          (let [ds (-> state :data-sources (get [shard replica]))]
+            (jdbc/insert-multi! @ds :association [:tp1 :tp2]
+                                [[type1 type2]
+                                 [type2 type1]]))
+          (catch Exception e
+            (throw (IOException. e)))))
       (getAssociation [this type shard replica]
-        (let [ds (-> state :data-sources (get [shard replica]))]
-          (->> (jdbc/query @ds ["SELECT tp2 FROM association WHERE tp1 = ?" type])
-               (map :tp2))))
+        (try
+          (let [ds (-> state :data-sources (get [shard replica]))]
+            (->> (jdbc/query @ds ["SELECT tp2 FROM association WHERE tp1 = ?" type])
+                 (map :tp2)))
+          (catch Exception e
+            (throw (IOException. e)))))
       (store [this events replica timestamp]
-        (let [ev (aget events 0)
-              key (.key domain ev)
-              keyhash (sha256/sha256-bytes key)
-              shard (hash-to-shard keyhash (:num-shards state))
-              ds (-> state :data-sources (get [shard replica]))
-              content-records (event-content-records domain events)]
-          (jdbc/insert-multi! @ds :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
-                              (events-to-records domain events keyhash timestamp))
-          (jdbc/insert-multi! @ds :event_bodies [:event_id :content]
-                              (vec (->> content-records
-                                        (filter #(>= (alength (second %)) 256)))))
-          (jdbc/insert-multi! @ds :small_event_bodies [:event_id :content]
-                              (vec (->> content-records
-                                        (filter #(< (alength (second %)) 256)))))))
+        (try
+          (let [ev (aget events 0)
+                key (.key domain ev)
+                keyhash (sha256/sha256-bytes key)
+                shard (hash-to-shard keyhash (:num-shards state))
+                ds (-> state :data-sources (get [shard replica]))
+                content-records (event-content-records domain events)]
+            (jdbc/insert-multi! @ds :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
+                                (events-to-records domain events keyhash timestamp))
+            (jdbc/insert-multi! @ds :event_bodies [:event_id :content]
+                                (vec (->> content-records
+                                          (filter #(>= (alength (second %)) 256)))))
+            (jdbc/insert-multi! @ds :small_event_bodies [:event_id :content]
+                                (vec (->> content-records
+                                          (filter #(< (alength (second %)) 256))))))
+          (catch Exception e
+            (throw (IOException. e)))))
       (get [this type key replica since now]
-        (let [shard (hash-to-shard key (:num-shards state))
-              ds (-> state :data-sources (get [shard replica]))]
-          (->> (jdbc/query @ds
-                           ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
-               (map :content)
-               (map #(.deserialize domain %)))))
+        (try
+          (let [shard (hash-to-shard key (:num-shards state))
+                ds (-> state :data-sources (get [shard replica]))]
+            (->> (jdbc/query @ds
+                             ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
+                 (map :content)
+                 (map #(.deserialize domain %))))
+          (catch Exception e
+            (throw (IOException. e)))))
       (getRelated [this ev replica since now]
-        (let [shard (-> (.key domain ev)
-                        (sha256/sha256-bytes)
-                        (hash-to-shard (:num-shards state)))
-              ds (-> state :data-sources (get [shard replica]))]
-          (->> (jdbc/query @ds
-                           ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
-               (map :content)
-               (map #(.deserialize domain %)))))
+        (try
+          (let [shard (-> (.key domain ev)
+                          (sha256/sha256-bytes)
+                          (hash-to-shard (:num-shards state)))
+                ds (-> state :data-sources (get [shard replica]))]
+            (->> (jdbc/query @ds
+                             ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
+                 (map :content)
+                 (map #(.deserialize domain %))))
+          (catch Exception e
+            (throw (IOException. e)))))
       (scanKeys [this shard replica]
-        (let [ds (-> state :data-sources (get [shard replica]))]
-          (->> (jdbc/query @ds
-                           ["SELECT DISTINCT keyhash FROM events"])
-               (map :keyhash))))
+        (try
+          (let [ds (-> state :data-sources (get [shard replica]))]
+            (->> (jdbc/query @ds
+                             ["SELECT DISTINCT keyhash FROM events"])
+                 (map :keyhash)))
+          (catch Exception e
+            (throw (IOException. e)))))
       (maintenance [this shard replica now]
-        (let [ds (-> state :data-sources (get [shard replica]))]
-          (jdbc/execute! @ds ["CALL compaction(?)" now])))
+        (try
+          (let [ds (-> state :data-sources (get [shard replica]))]
+            (jdbc/execute! @ds ["CALL compaction(?)" now]))
+          (catch Exception e
+            (throw (IOException. e)))))
       (pruneType [this type shard replica]
-        (let [ds (-> state :data-sources (get [shard replica]))]
-          (jdbc/execute! @ds ["DELETE FROM association WHERE tp1 = ? OR tp2 = ?" type type])
-          (jdbc/execute! @ds ["DELETE FROM events WHERE tp = ?" type]))))))
+        (try
+          (let [ds (-> state :data-sources (get [shard replica]))]
+            (jdbc/execute! @ds ["DELETE FROM association WHERE tp1 = ? OR tp2 = ?" type type])
+            (jdbc/execute! @ds ["DELETE FROM events WHERE tp = ?" type]))
+          (catch Exception e
+            (throw (IOException. e))))))))
 
 
 
