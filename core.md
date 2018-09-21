@@ -51,7 +51,7 @@ The overall number of database instances is requires to be `num-shards` times `n
                (.put "database" "my-dataabase")
                (.put "num-shards" 2)
                (.put "num-replicas" 3))
-       state (es/-init props)]
+       state (es/init props)]
    state => map?
    (def the-state state)))
 
@@ -155,13 +155,13 @@ Now, with an `EventDomain`, we can call `.createEventStore` to
 instantiate an `EventStore`.
 
 In the following example we use a record to mock the
-`EventStoreService`, and call the underlying `-createEventStore`
+`EventStoreService`, and call the underlying `createEventStore`
 function directly.
 ```clojure
 (defrecord MockObj [state])
 (fact
  (let [service (MockObj. the-state)]
-   (def my-event-store (es/-createEventStore service my-domain))
+   (def my-event-store (es/createEventStore service my-domain))
    my-event-store => (partial instance? EventStore)))
 
 ```
