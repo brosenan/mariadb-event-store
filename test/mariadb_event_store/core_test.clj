@@ -37,7 +37,8 @@
                (.put "database" "my-dataabase")
                (.put "num-shards" 2)
                (.put "num-replicas" 3))
-       state (es/init props)]
+       [arglist state] (es/init props)]
+   arglist => []
    state => map?
    (def the-state state)))
 
