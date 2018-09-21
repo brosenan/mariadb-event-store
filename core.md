@@ -110,8 +110,11 @@ for the purposes of this document.
           (dissoc :key)
           (dissoc :change)
           (dissoc :id)
+          (dissoc :ttl)
           pr-str
           to-bytes))
+    (ttl [this ev]
+      (:ttl ev))
     (serialize [this ev]
       ;; Obviously, not the best way to do this...
       (-> ev pr-str to-bytes))
@@ -228,7 +231,8 @@ of this table are calculated by the `events-to-records` function.
 ```clojure
 (fact
  (let [events (to-array [(event "id1" "type1" "key" 1 "body1")
-                         (event "id2" "type2" "key" 1 "body2")])
+                         (-> (event "id2" "type2" "key" 1 "body2")
+                             (assoc :ttl 1010))])
        records (es/events-to-records my-domain events ..keyhash.. 1000)]
    (count records) => 2
    ;; The first two columns are the ID and type
@@ -242,9 +246,9 @@ of this table are calculated by the `events-to-records` function.
      (-> records first (nth 3) String.) => expected)
    (let [expected (-> {:type "type2" :body "body2"} pr-str .getBytes sha256/sha256-bytes String.)]
      (-> records second (nth 3) String.) => expected)
-   ;; Last are the change and timestamp.
-   (->> records first (drop 4)) => [1 1000]
-   (->> records second (drop 4)) => [1 1000]))
+   ;; Last are the change, timestamp and tts (if defined).
+   (->> records first (drop 4)) => [1 1000 nil]
+   (->> records second (drop 4)) => [1 1000 1010]))
 
 ```
 The function `event-content-records` returns records containing
@@ -284,11 +288,12 @@ performance reasons, to avoid using BLOB fields whenever possible.
     (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
     (es/event-content-records my-domain events) => [["id-short" small-content]
                                                     ["id-long" big-content]]
-    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts]
+    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
                         ..records..) => irrelevant
     (jdbc/insert-multi! {:datasource the-datasource} :event_bodies [:event_id :content]
                         [["id-long" big-content]]) => irrelevant
     (jdbc/insert-multi! {:datasource the-datasource} :small_event_bodies [:event_id :content]
                         [["id-short" small-content]]) => irrelevant)))
+
 ```
 

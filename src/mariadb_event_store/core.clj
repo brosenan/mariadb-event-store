@@ -43,7 +43,8 @@
             keyhash
             bodyhash
             (.change domain ev)
-            timestamp]))))
+            timestamp
+            (.ttl domain ev)]))))
 
 (defn event-content-records [domain events]
   (for [i (range (alength events))]
@@ -74,7 +75,7 @@
               shard (hash-to-shard keyhash (:num-shards state))
               ds (-> state :data-sources (get [shard replica]))
               content-records (event-content-records domain events)]
-          (jdbc/insert-multi! @ds :events [:id :tp :keyhash :bodyhash :cng :ts]
+          (jdbc/insert-multi! @ds :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
                               (events-to-records domain events keyhash timestamp))
           (jdbc/insert-multi! @ds :event_bodies [:event_id :content]
                               (vec (->> content-records

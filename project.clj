@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [brosenan/event_store "0.0.3"]
+                 [brosenan/event_store "0.0.4"]
                  [org.clojure/java.jdbc "0.7.8"]
                  [hikari-cp "2.6.0"]
                  [org.mariadb.jdbc/mariadb-java-client "2.3.0"]
