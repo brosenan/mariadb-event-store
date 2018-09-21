@@ -4,9 +4,15 @@
             [clojure.java.jdbc :as jdbc]
             [pandect.algo.sha256 :as sha256])
   (:import (axiom.event_store EventStore)
-           (java.io IOException)))
+           (java.io IOException))
+  (:gen-class
+   :name mariadb_event_store.MariaDBEventStoreService
+   :implements [axiom.event_store.EventStoreService]
+   :init init
+   :state state
+   :constructors {[java.util.Map] []}))
 
-(defn -init [props]
+(defn init [props]
   (let [num-shards (.get props "num-shards")
         replication-factor (.get props "num-replicas")
         pattern (.get props "host-pattern")]
@@ -21,6 +27,8 @@
                                                            :password (.get props "password")
                                                            :server-name (str/replace pattern "%" (str (+ (* s replication-factor) r)))
                                                            :database-name (.get props "database")})})]))}))
+
+(def -init init)
 
 (defn hash-to-shard [hash num-shards]
   (-> (loop [s 0
@@ -53,7 +61,7 @@
       [(.id domain ev)
        (.serialize domain ev)])))
 
-(defn -createEventStore [this domain]
+(defn createEventStore [this domain]
   (let [state (.state this)]
     (reify EventStore
       (numShards [this]
@@ -137,5 +145,4 @@
           (catch Exception e
             (throw (IOException. e))))))))
 
-
-
+(def -createEventStore createEventStore)
