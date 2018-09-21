@@ -5,6 +5,9 @@
   * [Selecting a Shard](#selecting-a-shard)
   * [Extracting Metadata](#extracting-metadata)
 * [Event Retrieval](#event-retrieval)
+* [Scanning](#scanning)
+* [Compaction](#compaction)
+* [Removal of Types](#removal-of-types)
 ```clojure
 (ns mariadb-event-store.core-test
   (:require [midje.sweet :refer :all]
@@ -348,5 +351,63 @@ events, i.e., events of associated types with the same key.
         {:content bin2}]
     (from-bytes bin1) => ..event1..
     (from-bytes bin2) => ..event2..)))
+
+```
+# Scanning
+
+`.scanKeys` returns all the unique keys stored in a shard (as
+viewed by a specific replica). The interface leaves it up to the
+implementation to determine the representation of the key, so long
+that it agrees with `.get`, i.e., so long that it gives us access
+to all events of a certain types stored within a shard.  Our
+implementation uses the key-hash.
+```clojure
+(fact
+ (.scanKeys my-event-store 1 2) => [..kh1.. ..kh2..]
+ (provided
+  (jdbc/query {:datasource the-datasource}
+              ["SELECT DISTINCT keyhash FROM events"])
+  => [{:keyhash ..kh1..}
+      {:keyhash ..kh2..}]))
+
+```
+# Compaction
+
+Databases need to be occasionally compacted. In our case,
+compaction entails two operations. First, we need to remove all
+events that cancel each other, i.e., for which the sum of the
+quantitative change is 0. Second, we would like to remove all
+events for which the TTL has expired.
+
+The stored procedure `compaction` handles both tasks. It takes the
+current time as parameter.
+
+The method `.maintenance`, taking a shard, replica and the current
+time, handles compaction.
+```clojure
+(fact
+ (.maintenance my-event-store 1 2 2000) => nil
+ (provided
+  (jdbc/execute! {:datasource the-datasource}
+                 ["CALL compaction(?)" 2000]) => irrelevant))
+
+```
+# Removal of Types
+
+Types that are not in use anymore (e.g., after a software upgrade),
+can be removed using the `.pruneType` method. This removes them
+from the entire state, including:
+1. The `association` table, where records are removed when the type is either in the first or second position.
+2. The `events` table,
+```clojure
+(fact
+ (.pruneType my-event-store "old-type" 1 2) => nil
+ (provided
+  (jdbc/execute! {:datasource the-datasource}
+                 ["DELETE FROM association WHERE tp1 = ? OR tp2 = ?" "old-type" "old-type"]) => irrelevant
+  (jdbc/execute! {:datasource the-datasource}
+                 ["DELETE FROM events WHERE tp = ?" "old-type"]) => irrelevant))
+
+
 ```
 

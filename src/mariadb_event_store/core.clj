@@ -98,7 +98,19 @@
           (->> (jdbc/query @ds
                            ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
                (map :content)
-               (map #(.deserialize domain %))))))))
+               (map #(.deserialize domain %)))))
+      (scanKeys [this shard replica]
+        (let [ds (-> state :data-sources (get [shard replica]))]
+          (->> (jdbc/query @ds
+                           ["SELECT DISTINCT keyhash FROM events"])
+               (map :keyhash))))
+      (maintenance [this shard replica now]
+        (let [ds (-> state :data-sources (get [shard replica]))]
+          (jdbc/execute! @ds ["CALL compaction(?)" now])))
+      (pruneType [this type shard replica]
+        (let [ds (-> state :data-sources (get [shard replica]))]
+          (jdbc/execute! @ds ["DELETE FROM association WHERE tp1 = ? OR tp2 = ?" type type])
+          (jdbc/execute! @ds ["DELETE FROM events WHERE tp = ?" type]))))))
 
 
 
