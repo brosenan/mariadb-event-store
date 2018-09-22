@@ -19,7 +19,8 @@
                           password "thepassword"
                           labels {:app :mariadb-event-store}
                           mdb-ver "10.3"
-                          volume-spec {:accessModes ["ReadWriteOnce"]
+                          volume-spec {:storageClassName :manual
+                                       :accessModes ["ReadWriteOnce"]
                                        :resources {:requests {:storage "100Mi"}}}
                           db-res {}
                           mysql-port 3306}}]
@@ -28,15 +29,17 @@
                        (lk/add-container :db mdb-image
                                          (-> {:resources db-res}
                                              (lk/add-env {:MYSQL_ROOT_PASSWORD password})))
-                       (lk/add-init-container :install-schema mdb-image
-                                              {:command ["sh" "-c" (str "mysql --password=" password " < /schema/schema.sql")]})
+                       (lk/add-container :install-schema mdb-image
+                                         {:command ["sh" "/schema/install-schema.sh"]})
+                       (lk/add-volume :sock-vol {:emptyDir {}}
+                                      {:db "/var/run/mysqld/"
+                                       :install-schema "/var/run/mysqld/"})
                        (lk/add-files-to-container :install-schema :schemafile "/schema"
-                                                  (map-resources ["schema.sql"]))
+                                                  (map-resources ["schema.sql" "install-schema.sh"]))
                        (lk/stateful-set (* replication-factor num-shards))
                        (lk/add-volume-claim-template :db-vol
                                                      volume-spec
-                                                     {:db "/var/lib/mysql"
-                                                      :install-schema "/var/lib/mysql"})
+                                                     {:db "/var/lib/mysql"})
                        (lk/add-annotation :host-pattern "mdb-es-%.mariadb-event-store")
                        (lk/add-annotation :port mysql-port)
                        (lk/add-annotation :user "root")

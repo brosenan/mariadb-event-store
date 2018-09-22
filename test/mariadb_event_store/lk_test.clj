@@ -42,7 +42,8 @@
                                  :apiVersion :v1
                                  :metadata {:name (str "store-and-get-vol" i)
                                             :labels {:type :local}}
-                                 :spec {:storageClassName :standard
+                                 :spec {:storageClassName :manual
+                                        :persistentVolumeReclaimPolicy "Recycle"
                                         :capacity {:storage "200Mi"}
                                         :accessModes ["ReadWriteOnce"]
                                         :hostPath {:path (str "/mnt/data" i)}}})))))))
