@@ -18,10 +18,13 @@
                        :test
                        '[[org.clojure/clojure "1.9.0"]
                          [brosenan/event_store "0.0.4"]
-                         [brosenan/injectthedriver "0.0.5"]]
+                         [brosenan/injectthedriver "0.0.5"]
+                         [pandect "0.6.1"]]
                        {}
                        '[(ns main-test
                            (:use midje.sweet)
+                           (:require
+                            [pandect.algo.sha256 :as sha256])
                            (:import (injectthedriver DriverFactory)
                                     (axiom.event_store EventStoreService
                                                        EventDomain)))
@@ -64,8 +67,8 @@
                           (doseq [i (range 10)
                                   r (range 2)]
                             (.store es (to-array [(event (str "ev" i) "foo" (str i) 1 {:value (* i 2)})]) r (+ 1000 i)))
-                          (.get es "foo" (.getBytes "3") 1 1000 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
-                          (.get es "foo" (.getBytes "3") 1 1100 2000) => [])])
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1000 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1100 2000) => [])])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the
