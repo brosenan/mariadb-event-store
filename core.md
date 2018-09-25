@@ -4,6 +4,8 @@
 * [Storing Events](#storing-events)
   * [Selecting a Shard](#selecting-a-shard)
   * [Extracting Metadata](#extracting-metadata)
+  * [Extracting Content](#extracting-content)
+  * [The `.store` Method](#the-`.store`-method)
 * [Event Retrieval](#event-retrieval)
 * [Scanning](#scanning)
 * [Compaction](#compaction)
@@ -18,15 +20,7 @@
             [pandect.algo.sha256 :as sha256])
   (:import (axiom.event_store EventStore
                               EventDomain)
-           (java.io IOException))
-  (:gen-class
-   :name mariadb_event_store.EventStoreService
-   :implements [axiom.event_store.EventStoreService]
-   :state state
-   :init init
-   :constructors {[java.util.Map] []}))
-
-'(def ds {:datasource (make-datasource dbconn)})
+           (java.io IOException)))
 
 ```
 # Initialization
@@ -261,6 +255,8 @@ of this table are calculated by the `events-to-records` function.
    (->> records second (drop 4)) => [1 1000 1010]))
 
 ```
+## Extracting Content
+
 The function `event-content-records` returns records containing
 `event_id` and `content` fields for all events.
 ```clojure
@@ -273,6 +269,8 @@ The function `event-content-records` returns records containing
    (map #(-> % second String. read-string) records) => events))
 
 ```
+## The `.store` Method
+
 The method `.store` takes an array of events, assumed to have the
 same key, and stores them within a single transaction to a replica
 of the shard that corresponds to the key.
@@ -305,6 +303,41 @@ performance reasons, to avoid using BLOB fields whenever possible.
     (jdbc/insert-multi! {:datasource the-datasource} :small_event_bodies [:event_id :content]
                         [["id-short" small-content]]) => irrelevant)))
 
+```
+Insertion to either content tables is only done if there is
+something to insert.
+```clojure
+(fact
+ (let [key-bytes (.getBytes "key")
+       events (to-array [(event "id1" "type1" "key" 1 "body1")])
+       small-content (-> (range 3) pr-str .getBytes)]
+   (.store my-event-store events 2 1000) => nil
+   (provided
+    (to-bytes "key") => key-bytes
+    (sha256/sha256-bytes key-bytes) => ..keyhash..
+    (es/hash-to-shard ..keyhash.. 2) => 1
+    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/event-content-records my-domain events) => [["id-short" small-content]]
+    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
+                        ..records..) => irrelevant
+    (jdbc/insert-multi! {:datasource the-datasource} :small_event_bodies [:event_id :content]
+                        [["id-short" small-content]]) => irrelevant)))
+
+(fact
+ (let [key-bytes (.getBytes "key")
+       events (to-array [(event "id1" "type1" "key" 1 "body1")])
+       big-content (-> (range 300) pr-str .getBytes)]
+   (.store my-event-store events 2 1000) => nil
+   (provided
+    (to-bytes "key") => key-bytes
+    (sha256/sha256-bytes key-bytes) => ..keyhash..
+    (es/hash-to-shard ..keyhash.. 2) => 1
+    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/event-content-records my-domain events) => [["id-long" big-content]]
+    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
+                        ..records..) => irrelevant
+    (jdbc/insert-multi! {:datasource the-datasource} :event_bodies [:event_id :content]
+                        [["id-long" big-content]]) => irrelevant)))
 ```
 # Event Retrieval
 

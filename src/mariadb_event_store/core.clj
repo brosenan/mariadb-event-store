@@ -93,12 +93,14 @@
                 content-records (event-content-records domain events)]
             (jdbc/insert-multi! @ds :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
                                 (events-to-records domain events keyhash timestamp))
-            (jdbc/insert-multi! @ds :event_bodies [:event_id :content]
-                                (vec (->> content-records
-                                          (filter #(>= (alength (second %)) 256)))))
-            (jdbc/insert-multi! @ds :small_event_bodies [:event_id :content]
-                                (vec (->> content-records
-                                          (filter #(< (alength (second %)) 256))))))
+            (let [recs (filter #(>= (alength (second %)) 256) content-records)]
+              (when-not (empty? recs)
+                (jdbc/insert-multi! @ds :event_bodies [:event_id :content]
+                                    (vec recs))))
+            (let [recs (filter #(< (alength (second %)) 256) content-records)]
+              (when-not (empty? recs)
+                (jdbc/insert-multi! @ds :small_event_bodies [:event_id :content]
+                                    (vec recs)))))
           (catch Exception e
             (throw (IOException. e)))))
       (get [this type key replica since now]
