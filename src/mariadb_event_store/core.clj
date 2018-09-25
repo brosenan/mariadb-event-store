@@ -16,13 +16,13 @@
   (let [num-shards (.get props "num-shards")
         replication-factor (.get props "num-replicas")
         pattern (.get props "host-pattern")]
-    [[]  {:num-shards num-shards
-          :num-replicas replication-factor
+    [[]  {:num-shards (long num-shards)
+          :num-replicas (long replication-factor)
           :data-sources (into {} (for [s (range num-shards)
                                        r (range replication-factor)]
                                    [[s r] (delay {:datasource (hcp/make-datasource
                                                                {:adapter "mariadb"
-                                                                :port-number (.get props "port")
+                                                                :port-number (long (.get props "port"))
                                                                 :username (.get props "user")
                                                                 :password (.get props "password")
                                                                 :server-name (str/replace pattern "%" (str (+ (* s replication-factor) r)))

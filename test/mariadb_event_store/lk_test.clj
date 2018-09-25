@@ -10,7 +10,7 @@
   (-> $
       (lkt/test :store-and-get
                 {:mariadb-event-store-config {:num-shards 2
-                                              :replication-factor 3}}
+                                              :replication-factor 2}}
                 [:axiom-event-store]
                 (fn [event-store]
                   (-> (lk/pod :test {})
@@ -26,12 +26,46 @@
                                     (axiom.event_store EventStoreService
                                                        EventDomain)))
                          (def ess (DriverFactory/createDriverFor EventStoreService))
+                         (prn (.state ess))
                          (def domain
-                           (reify EventDomain))
+                           (reify EventDomain
+                             (id [this ev]
+                               (:id ev))
+                             (type [this ev]
+                               (:type ev))
+                             (key [this ev]
+                               (-> ev :key .getBytes))
+                             (change [this ev]
+                               (:change ev))
+                             (body [this ev]
+                               (-> ev
+                                   (dissoc :id)
+                                   (dissoc :change)
+                                   (dissoc :key)
+                                   (pr-str)
+                                   .getBytes))
+                             (ttl [this ev]
+                               (:ttl ev))
+                             (serialize [this ev]
+                               (-> ev (pr-str) .getBytes))
+                             (deserialize [this ser]
+                               (-> ser String. read-string))))
                          (def es (.createEventStore ess domain))
+                         (defn event [id type key change data]
+                           {:id id
+                            :type type
+                            :key key
+                            :change change
+                            :data data})
                          (fact
                           (.numShards es) => 2
-                          (.replicationFactor es) => 3)])
+                          (.replicationFactor es) => 2)
+                         (fact
+                          (doseq [i (range 10)
+                                  r (range 2)]
+                            (.store es (to-array [(event (str "ev" i) "foo" (str i) 1 {:value (* i 2)})]) r (+ 1000 i)))
+                          (.get es (.getBytes "3") 1 1000 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
+                          (.get es (.getBytes "3") 1 1100 2000) => [])])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the

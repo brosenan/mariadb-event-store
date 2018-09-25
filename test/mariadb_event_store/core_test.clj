@@ -6,15 +6,7 @@
             [pandect.algo.sha256 :as sha256])
   (:import (axiom.event_store EventStore
                               EventDomain)
-           (java.io IOException))
-  (:gen-class
-   :name mariadb_event_store.EventStoreService
-   :implements [axiom.event_store.EventStoreService]
-   :state state
-   :init init
-   :constructors {[java.util.Map] []}))
-
-'(def ds {:datasource (make-datasource dbconn)})
+           (java.io IOException)))
 
 ;; # Initialization
 

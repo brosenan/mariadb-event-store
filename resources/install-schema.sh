@@ -6,5 +6,5 @@ done
 
 echo Installed schema. Sleeping forever
 while true; do
-    sleep 1000
+    sleep 1
 done
