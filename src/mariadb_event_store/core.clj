@@ -108,7 +108,7 @@
           (let [shard (hash-to-shard key (:num-shards state))
                 ds (-> state :data-sources (get [shard replica]))]
             (->> (jdbc/query @ds
-                             ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
+                             ["SELECT content FROM events_with_bodies WHERE tp = ? AND keyhash = ? AND ts >= ? AND (ttl IS NULL OR ttl >= ?)" type key since now])
                  (map :content)
                  (map #(.deserialize domain %))))
           (catch Exception e

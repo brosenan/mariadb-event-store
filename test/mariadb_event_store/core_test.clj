@@ -290,6 +290,7 @@
                         ..records..) => irrelevant
     (jdbc/insert-multi! {:datasource the-datasource} :event_bodies [:event_id :content]
                         [["id-long" big-content]]) => irrelevant)))
+
 ;; # Event Retrieval
 
 ;; The `.get` method takes a type ane a key, and retrieves all events
@@ -309,7 +310,7 @@
    (provided
     (es/hash-to-shard keyhash 2) => 1
     (jdbc/query {:datasource the-datasource}
-                ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+                ["SELECT content FROM events_with_bodies WHERE tp = ? AND keyhash = ? AND ts >= ? AND (ttl IS NULL OR ttl >= ?)" "mytype" keyhash 1000 2000])
     => [{:content bin1}
         {:content bin2}]
     (from-bytes bin1) => ..event1..
@@ -437,7 +438,7 @@
    (provided
     (es/hash-to-shard keyhash 2) => 1
     (jdbc/query {:datasource the-datasource}
-                ["SELECT content FROM events_with_bodies WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+                ["SELECT content FROM events_with_bodies WHERE tp = ? AND keyhash = ? AND ts >= ? AND (ttl IS NULL OR ttl >= ?)" "mytype" keyhash 1000 2000])
     =throws=> (Exception. "something went wrong"))))
 
 (fact
