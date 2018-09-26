@@ -298,20 +298,20 @@ performance reasons, to avoid using BLOB fields whenever possible.
     (to-bytes "key") => key-bytes
     (sha256/sha256-bytes key-bytes) => ..keyhash..
     (es/hash-to-shard ..keyhash.. 2) => 1
-    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/events-to-records my-domain events ..keyhash.. 1000) => [..rec1.. ..rec2..]
     (es/event-content-records my-domain events) => [["id-short" small-content]
                                                     ["id-long" big-content]]
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
-                    ..records..]
+                    ..rec1.. ..rec2..]
                    {:multi? true}) => irrelevant
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
-                    [["id-long" big-content]]]
+                    ["id-long" big-content]]
                    {:multi? true}) => irrelevant
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
-                    [["id-short" small-content]]]
+                    ["id-short" small-content]]
                    {:multi? true}) => irrelevant)))
 
 ```
@@ -327,15 +327,15 @@ something to insert.
     (to-bytes "key") => key-bytes
     (sha256/sha256-bytes key-bytes) => ..keyhash..
     (es/hash-to-shard ..keyhash.. 2) => 1
-    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/events-to-records my-domain events ..keyhash.. 1000) => [..rec1..]
     (es/event-content-records my-domain events) => [["id-short" small-content]]
     (jdbc/execute! {:datasource the-datasource} 
                    ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
-                    ..records..]
+                    ..rec1..]
                    {:multi? true}) => irrelevant
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
-                    [["id-short" small-content]]]
+                    ["id-short" small-content]]
                    {:multi? true}) => irrelevant)))
 
 (fact
@@ -347,15 +347,15 @@ something to insert.
     (to-bytes "key") => key-bytes
     (sha256/sha256-bytes key-bytes) => ..keyhash..
     (es/hash-to-shard ..keyhash.. 2) => 1
-    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/events-to-records my-domain events ..keyhash.. 1000) => [..rec1..]
     (es/event-content-records my-domain events) => [["id-long" big-content]]
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
-                    ..records..]
+                    ..rec1..]
                    {:multi? true}) => irrelevant
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
-                    [["id-long" big-content]]]
+                    ["id-long" big-content]]
                    {:multi? true}) => irrelevant)))
 
 ```
@@ -506,12 +506,12 @@ The `.getAssociation` method makes a query.
     (to-bytes "key") => key-bytes
     (sha256/sha256-bytes key-bytes) => ..keyhash..
     (es/hash-to-shard ..keyhash.. 2) => 1
-    (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
+    (es/events-to-records my-domain events ..keyhash.. 1000) => [..rec1.. ..rec2..]
     (es/event-content-records my-domain events) => [["id-short" small-content]
                                                     ["id-long" big-content]]
     (jdbc/execute! {:datasource the-datasource}
                    ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
-                    ..records..]
+                    ..rec1.. ..rec2..]
                    {:multi? true}) =throws=> (Exception. "something went wrong"))))
 
 ```

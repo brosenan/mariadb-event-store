@@ -94,18 +94,18 @@
                 shard (hash-to-shard keyhash (:num-shards state))
                 ds (-> state :data-sources (get [shard replica]))
                 content-records (event-content-records domain events)]
-            (jdbc/execute! @ds ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
-                                (events-to-records domain events keyhash timestamp)]
+            (jdbc/execute! @ds (vec (cons "INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
+                                          (events-to-records domain events keyhash timestamp)))
                            {:multi? true})
             (let [recs (filter #(>= (alength (second %)) 256) content-records)]
               (when-not (empty? recs)
-                (jdbc/execute! @ds ["INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
-                                    (vec recs)]
+                (jdbc/execute! @ds (vec (cons "INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                                              recs))
                                {:multi? true})))
             (let [recs (filter #(< (alength (second %)) 256) content-records)]
               (when-not (empty? recs)
-                (jdbc/execute! @ds ["INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
-                                    (vec recs)]
+                (jdbc/execute! @ds (vec (cons "INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                                              recs))
                                {:multi? true}))))
           (catch Exception e
             (throw (IOException. e)))))

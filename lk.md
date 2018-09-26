@@ -75,10 +75,9 @@
                           (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
                           (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1100 2000) => []
                           ;; Now we re-store ev3, this time with some
-                          ;; TTL. All values except the TTL are
-                          ;; ignored.
+                          ;; TTL.
                           (doseq [r (range 2)]
-                            (.store es (to-array [(-> (event "ev3" "ignored" "3000" -333 {:value :is-ignored})
+                            (.store es (to-array [(-> (event "ev3" "foo" "3" 1 {:value 6})
                                                       (assoc :tts 1500))]) r 1200)))])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
