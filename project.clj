@@ -1,4 +1,4 @@
-(defproject brosenan/mariadb-event-store "0.1.0"
+(defproject brosenan/mariadb-event-store "0.1.1-SNAPSHOT"
   :description "An EventStoreService implementation based on an array of MariaDB instances"
   :url "https://github.com/brosenan/mariadb-event-store"
   :license {:name "Eclipse Public License"
