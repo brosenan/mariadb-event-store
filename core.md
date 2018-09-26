@@ -250,15 +250,19 @@ of this table are calculated by the `events-to-records` function.
      (-> records first (nth 3) String.) => expected)
    (let [expected (-> {:type "type2" :body "body2"} pr-str .getBytes sha256/sha256-bytes String.)]
      (-> records second (nth 3) String.) => expected)
-   ;; Last are the change, timestamp and tts (if defined).
-   (->> records first (drop 4)) => [1 1000 nil]
-   (->> records second (drop 4)) => [1 1000 1010]))
+   ;; Last are the change, timestamp and tts (if defined), which
+   ;; appears twice. Once for the insertion, and once for the update,
+   ;; in case the event already exists.
+   (->> records first (drop 4)) => [1 1000 nil nil]
+   (->> records second (drop 4)) => [1 1000 1010 1010]))
 
 ```
 ## Extracting Content
 
 The function `event-content-records` returns records containing
-`event_id` and `content` fields for all events.
+`event_id` and `content` fields for all events. `content` is
+provided twice, once for the insertion, and once for the update, if
+the event already exists.
 ```clojure
 (fact
  (let [events [(event "id1" "type1" "key" 1 {:large (range 100)})
@@ -266,7 +270,8 @@ The function `event-content-records` returns records containing
        records (es/event-content-records my-domain (to-array events))]
    (count records) => 2
    (map first records) => ["id1" "id2"]
-   (map #(-> % second String. read-string) records) => events))
+   (map #(-> % second String. read-string) records) => events
+   (map #(-> % (nth 2) String. read-string) records) => events))
 
 ```
 ## The `.store` Method
@@ -296,12 +301,18 @@ performance reasons, to avoid using BLOB fields whenever possible.
     (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
     (es/event-content-records my-domain events) => [["id-short" small-content]
                                                     ["id-long" big-content]]
-    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
-                        ..records..) => irrelevant
-    (jdbc/insert-multi! {:datasource the-datasource} :event_bodies [:event_id :content]
-                        [["id-long" big-content]]) => irrelevant
-    (jdbc/insert-multi! {:datasource the-datasource} :small_event_bodies [:event_id :content]
-                        [["id-short" small-content]]) => irrelevant)))
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
+                    ..records..]
+                   {:multi? true}) => irrelevant
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                    [["id-long" big-content]]]
+                   {:multi? true}) => irrelevant
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                    [["id-short" small-content]]]
+                   {:multi? true}) => irrelevant)))
 
 ```
 Insertion to either content tables is only done if there is
@@ -318,10 +329,14 @@ something to insert.
     (es/hash-to-shard ..keyhash.. 2) => 1
     (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
     (es/event-content-records my-domain events) => [["id-short" small-content]]
-    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
-                        ..records..) => irrelevant
-    (jdbc/insert-multi! {:datasource the-datasource} :small_event_bodies [:event_id :content]
-                        [["id-short" small-content]]) => irrelevant)))
+    (jdbc/execute! {:datasource the-datasource} 
+                   ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
+                    ..records..]
+                   {:multi? true}) => irrelevant
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                    [["id-short" small-content]]]
+                   {:multi? true}) => irrelevant)))
 
 (fact
  (let [key-bytes (.getBytes "key")
@@ -334,10 +349,14 @@ something to insert.
     (es/hash-to-shard ..keyhash.. 2) => 1
     (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
     (es/event-content-records my-domain events) => [["id-long" big-content]]
-    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
-                        ..records..) => irrelevant
-    (jdbc/insert-multi! {:datasource the-datasource} :event_bodies [:event_id :content]
-                        [["id-long" big-content]]) => irrelevant)))
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
+                    ..records..]
+                   {:multi? true}) => irrelevant
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                    [["id-long" big-content]]]
+                   {:multi? true}) => irrelevant)))
 
 ```
 # Event Retrieval
@@ -490,8 +509,10 @@ The `.getAssociation` method makes a query.
     (es/events-to-records my-domain events ..keyhash.. 1000) => ..records..
     (es/event-content-records my-domain events) => [["id-short" small-content]
                                                     ["id-long" big-content]]
-    (jdbc/insert-multi! {:datasource the-datasource} :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
-                        ..records..) =throws=> (Exception. "something went wrong"))))
+    (jdbc/execute! {:datasource the-datasource}
+                   ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
+                    ..records..]
+                   {:multi? true}) =throws=> (Exception. "something went wrong"))))
 
 ```
 `.get` and `.getRelated` each make queries.

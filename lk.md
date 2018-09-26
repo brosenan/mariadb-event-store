@@ -65,11 +65,21 @@
                           (.numShards es) => 2
                           (.replicationFactor es) => 2)
                          (fact
+                          ;; We store 10 events on all (2) replicas.
                           (doseq [i (range 10)
                                   r (range 2)]
                             (.store es (to-array [(event (str "ev" i) "foo" (str i) 1 {:value (* i 2)})]) r (+ 1000 i)))
-                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1000 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
-                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1100 2000) => [])])
+                          ;; Based on the since parameter, we should
+                          ;; either get a specific event by its key,
+                          ;; or none.
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1100 2000) => []
+                          ;; Now we re-store ev3, this time with some
+                          ;; TTL. All values except the TTL are
+                          ;; ignored.
+                          (doseq [r (range 2)]
+                            (.store es (to-array [(-> (event "ev3" "ignored" "3000" -333 {:value :is-ignored})
+                                                      (assoc :tts 1500))]) r 1200)))])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the

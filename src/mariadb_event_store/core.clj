@@ -53,13 +53,16 @@
             bodyhash
             (.change domain ev)
             timestamp
+            (.ttl domain ev)
             (.ttl domain ev)]))))
 
 (defn event-content-records [domain events]
   (for [i (range (alength events))]
-    (let [ev (aget events i)]
+    (let [ev (aget events i)
+          ser (.serialize domain ev)]
       [(.id domain ev)
-       (.serialize domain ev)])))
+       ser
+       ser])))
 
 (defn createEventStore [this domain]
   (let [state (.state this)]
@@ -91,16 +94,19 @@
                 shard (hash-to-shard keyhash (:num-shards state))
                 ds (-> state :data-sources (get [shard replica]))
                 content-records (event-content-records domain events)]
-            (jdbc/insert-multi! @ds :events [:id :tp :keyhash :bodyhash :cng :ts :ttl]
-                                (events-to-records domain events keyhash timestamp))
+            (jdbc/execute! @ds ["INSERT INTO events (id, tp, keyhash, bodyhash, cng, ts, ttl) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE ttl = ?"
+                                (events-to-records domain events keyhash timestamp)]
+                           {:multi? true})
             (let [recs (filter #(>= (alength (second %)) 256) content-records)]
               (when-not (empty? recs)
-                (jdbc/insert-multi! @ds :event_bodies [:event_id :content]
-                                    (vec recs))))
+                (jdbc/execute! @ds ["INSERT INTO event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                                    (vec recs)]
+                               {:multi? true})))
             (let [recs (filter #(< (alength (second %)) 256) content-records)]
               (when-not (empty? recs)
-                (jdbc/insert-multi! @ds :small_event_bodies [:event_id :content]
-                                    (vec recs)))))
+                (jdbc/execute! @ds ["INSERT INTO small_event_bodies (event_id, content) VALUES (?, ?) ON DUPLICATE KEY UPDATE content = ?"
+                                    (vec recs)]
+                               {:multi? true}))))
           (catch Exception e
             (throw (IOException. e)))))
       (get [this type key replica since now]
