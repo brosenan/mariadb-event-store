@@ -77,7 +77,13 @@
                           ;; TTL.
                           (doseq [r (range 2)]
                             (.store es (to-array [(-> (event "ev3" "foo" "3" 1 {:value 6})
-                                                      (assoc :tts 1500))]) r 1200)))])
+                                                      (assoc :ttl 1500))]) r 1200))
+                          ;; Now, if we get the event at time 2000, we
+                          ;; should not see it, but earlier than its
+                          ;; TTL, we should.
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 2000) => []
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 1400) => [(-> (event "ev3" "foo" "3" 1 {:value 6})
+                                                                                                  (assoc :ttl 1500))])])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the

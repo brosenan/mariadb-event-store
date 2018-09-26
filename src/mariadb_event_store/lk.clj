@@ -37,6 +37,7 @@
                        (lk/add-files-to-container :install-schema :schemafile "/schema"
                                                   (map-resources ["schema.sql" "install-schema.sh"]))
                        (lk/stateful-set (* replication-factor num-shards))
+                       (update :spec assoc :podManagementPolicy :Parallel)
                        (lk/add-volume-claim-template :db-vol
                                                      volume-spec
                                                      {:db "/var/lib/mysql"})
