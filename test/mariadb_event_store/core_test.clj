@@ -149,9 +149,10 @@
 (fact
  (.associate my-event-store "foo" "bar" 1 2) => nil
  (provided
-  (jdbc/insert-multi! {:datasource the-datasource} :association [:tp1 :tp2]
-                      [["foo" "bar"]
-                       ["bar" "foo"]]) => irrelevant))
+  (jdbc/execute! {:datasource the-datasource}
+                 ["INSERT IGNORE INTO association (tp1, tp2) VALUES (?, ?), (?, ?)"
+                  "foo" "bar"
+                  "bar" "foo"]) => irrelevant))
 
 ;; The `.getAssociation` method returns all the types associated with
 ;; a given type.
@@ -350,7 +351,7 @@
     (es/hash-to-shard keyhash 2) => 1
     ;; Make the query
     (jdbc/query {:datasource the-datasource}
-                ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+                ["SELECT content FROM related_events WHERE rel_id = ? AND ts >= ? AND (ttl IS NULL OR ttl >= ?)" "id" 1000 2000])
     => [{:content bin1}
         {:content bin2}]
     (from-bytes bin1) => ..event1..
@@ -418,9 +419,10 @@
 (fact
  (.associate my-event-store "foo" "bar" 1 2) => (throws IOException)
  (provided
-  (jdbc/insert-multi! {:datasource the-datasource} :association [:tp1 :tp2]
-                      [["foo" "bar"]
-                       ["bar" "foo"]]) =throws=> (Exception. "something went wrong")))
+  (jdbc/execute! {:datasource the-datasource}
+                 ["INSERT IGNORE INTO association (tp1, tp2) VALUES (?, ?), (?, ?)"
+                  "foo" "bar"
+                  "bar" "foo"]) =throws=> (Exception. "something went wrong")))
 
 ;; The `.getAssociation` method makes a query.
 (fact
@@ -475,7 +477,7 @@
     (es/hash-to-shard keyhash 2) => 1
     ;; Make the query
     (jdbc/query {:datasource the-datasource}
-                ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" 1000 2000])
+                ["SELECT content FROM related_events WHERE rel_id = ? AND ts >= ? AND (ttl IS NULL OR ttl >= ?)" "id" 1000 2000])
     =throws=> (Exception. "something went wrong"))))
 
 ;; `.scanKeys` makes a query.

@@ -74,9 +74,10 @@
       (associate [this type1 type2 shard replica]
         (try
           (let [ds (-> state :data-sources (get [shard replica]))]
-            (jdbc/insert-multi! @ds :association [:tp1 :tp2]
-                                [[type1 type2]
-                                 [type2 type1]]))
+            (jdbc/execute! @ds
+                           ["INSERT IGNORE INTO association (tp1, tp2) VALUES (?, ?), (?, ?)"
+                            type1 type2
+                            type2 type1]))
           (catch Exception e
             (throw (IOException. e)))))
       (getAssociation [this type shard replica]
@@ -126,7 +127,7 @@
                           (hash-to-shard (:num-shards state)))
                 ds (-> state :data-sources (get [shard replica]))]
             (->> (jdbc/query @ds
-                             ["SELECT content FROM related_events WHERE ts >= ? AND (ttl IS NULL OR ttl >= ?)" since now])
+                             ["SELECT content FROM related_events WHERE rel_id = ? AND ts >= ? AND (ttl IS NULL OR ttl >= ?)" (.id domain ev) since now])
                  (map :content)
                  (map #(.deserialize domain %))))
           (catch Exception e
