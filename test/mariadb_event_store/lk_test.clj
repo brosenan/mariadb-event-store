@@ -133,7 +133,16 @@
                                (mapcat #(.get es "foo" % 0 0 2000))) => []
                           (->> (range 2)
                                (mapcat #(.scanKeys es % 0))
-                               (mapcat #(.get es "bar" % 0 0 2000))) => [(event "bar4" "bar" "4" 1 {:large-content (range 1000)})])])
+                               (mapcat #(.get es "bar" % 0 0 2000))) => [(event "bar4" "bar" "4" 1 {:large-content (range 1000)})])
+                         (fact
+                          ;; If we prune the "bar" type, the event we
+                          ;; see above would be erased.
+                          (doseq [s (range 2)
+                                  r (range 2)]
+                            (.pruneType es "bar" s r))
+                          (->> (range 2)
+                               (mapcat #(.scanKeys es % 0))
+                               (mapcat #(.get es "bar" % 0 0 2000))) => [])])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the
@@ -145,7 +154,7 @@
                                  :metadata {:name (str "store-and-get-vol" i)
                                             :labels {:type :local}}
                                  :spec {:storageClassName :manual
-                                        :persistentVolumeReclaimPolicy "Recycle"
+                                        :persistentVolumeReclaimPolicy "Delete"
                                         :capacity {:storage "200Mi"}
                                         :accessModes ["ReadWriteOnce"]
                                         :hostPath {:path (str "/mnt/data" i)}}})))))))
