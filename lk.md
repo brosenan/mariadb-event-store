@@ -30,7 +30,6 @@
                                     (axiom.event_store EventStoreService
                                                        EventDomain)))
                          (def ess (DriverFactory/createDriverFor EventStoreService))
-                         (prn (.state ess))
                          (def domain
                            (reify EventDomain
                              (id [this ev]
@@ -68,23 +67,41 @@
                           ;; We store 10 events on all (2) replicas.
                           (doseq [i (range 10)
                                   r (range 2)]
-                            (.store es (to-array [(event (str "ev" i) "foo" (str i) 1 {:value (* i 2)})]) r (+ 1000 i)))
+                            (.store es (to-array [(event (str "ev" i) "foo" (str i) 1 {:value (* i 2)})]) r (+ 1000 i))))
+                         (fact
                           ;; Based on the since parameter, we should
                           ;; either get a specific event by its key,
                           ;; or none.
                           (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 2000) => [(event "ev3" "foo" "3" 1 {:value 6})]
-                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1100 2000) => []
+                          (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 1100 2000) => [])
+                         (fact
                           ;; Now we re-store ev3, this time with some
                           ;; TTL.
                           (doseq [r (range 2)]
                             (.store es (to-array [(-> (event "ev3" "foo" "3" 1 {:value 6})
-                                                      (assoc :ttl 1500))]) r 1200))
+                                                      (assoc :ttl 1500))]) r 1200)))
+                         (fact
                           ;; Now, if we get the event at time 2000, we
                           ;; should not see it, but earlier than its
                           ;; TTL, we should.
                           (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 2000) => []
                           (.get es "foo" (-> "3" .getBytes sha256/sha256-bytes) 1 0 1400) => [(-> (event "ev3" "foo" "3" 1 {:value 6})
-                                                                                                  (assoc :ttl 1500))])])
+                                                                                                  (assoc :ttl 1500))])
+                         (fact
+                          ;; Let's define bar to be associated with foo
+                          (doseq [s (range 2)
+                                  r (range 2)]
+                            (.associate es "foo" "bar" s r)))
+                         (fact
+                          ;; Now if we have a bar event, it is related
+                          ;; to the corresponding foo events.
+                          (let [bar-event (event "bar4" "bar" "4" 1 {:large-content (range 1000)})]
+                            (doseq [r (range 2)]
+                              (.store es (to-array [bar-event]) r 1300))
+                            ;; A single foo event is related to this one, and vice versa
+                            (let [foo-events (.getRelated es bar-event 1 0 2000)]
+                              foo-events => [(event "ev4" "foo" "4" 1 {:value 8})]
+                              (.getRelated es (first foo-events) 0 0 2000) => [bar-event])))])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the

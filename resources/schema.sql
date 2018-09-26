@@ -86,6 +86,7 @@ SELECT events.id AS rel_id, events_with_bodies.*
 FROM events, events_with_bodies, association
 WHERE events.tp = association.tp1
 AND events_with_bodies.tp = association.tp2
+AND events.keyhash = events_with_bodies.keyhash
 ORDER BY ts DESC
 //
 
