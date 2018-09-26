@@ -100,13 +100,46 @@
                             ;; A single foo event is related to this one, and vice versa
                             (let [foo-events (.getRelated es bar-event 1 0 2000)]
                               foo-events => [(event "ev4" "foo" "4" 1 {:value 8})]
-                              (.getRelated es (first foo-events) 0 0 2000) => [bar-event])))])
+                              (.getRelated es (first foo-events) 0 0 2000) => [bar-event])))
+                         (fact
+                          ;; Scanning all shards together should give
+                          ;; us 10 distinct values.
+                          (let [keys (->> (range 2)
+                                          (mapcat #(.scanKeys es % 0)))]
+                            (count keys) => 10
+                            ;; Each key is usable with .get
+                            (doseq [key keys]
+                              (count (.get es "foo" key 1 0 1400)) => 1)))
+                         (fact
+                          ;; Now let us add deletion events (:change =
+                          ;; -1) for all foo events, and see how
+                          ;; compaction removes them.
+                          (doseq [i (range 10)
+                                  r (range 2)]
+                                 (.store es (to-array [(event (str "del" i) "foo" (str i) -1 {:value (* i 2)})]) r (+ 1100 i)))
+                          ;; We still have ten distinct keys stored.
+                          (->> (range 2)
+                               (mapcat #(.scanKeys es % 0))
+                               (count)) => 10
+                          ;; Now we compact the database
+                          (doseq [s (range 2)
+                                  r (range 2)]
+                            (.maintenance es s r 2000))
+                          ;; After compaction, we should only see one
+                          ;; key: the key 4 of the "bar" event we
+                          ;; created.
+                          (->> (range 2)
+                               (mapcat #(.scanKeys es % 0))
+                               (mapcat #(.get es "foo" % 0 0 2000))) => []
+                          (->> (range 2)
+                               (mapcat #(.scanKeys es % 0))
+                               (mapcat #(.get es "bar" % 0 0 2000))) => [(event "bar4" "bar" "4" 1 {:large-content (range 1000)})])])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the
                       ;; database instances.
                       (update :$additional concat
-                              (for [i (range 6)]
+                              (for [i (range 4)]
                                 {:kind :PersistentVolume
                                  :apiVersion :v1
                                  :metadata {:name (str "store-and-get-vol" i)
