@@ -161,8 +161,9 @@
 
 (fact
  :kube
- (-> (lk/injector)
-     (mes-lk/module)
-     (test-module)
-     (lk/standard-descs)
-     (lkt/kube-tests "mdb-es")) => "")
+ (lku/with-docker-repo
+   (-> (lk/injector)
+       (mes-lk/module)
+       (test-module)
+       (lk/standard-descs)
+       (lkt/kube-tests "mdb-es"))) => "")
