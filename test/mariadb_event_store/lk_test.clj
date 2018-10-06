@@ -144,6 +144,10 @@
                                (mapcat #(.scanKeys es % 0))
                                (mapcat #(.get es "bar" % 0 0 2000))) => [])])
                       (lk/update-container :test lku/inject-driver EventStoreService event-store)
+                      (lk/add-init-container :wait-for-db "busybox"
+                                             {:command ["sh" "-c" "while ! sh -e /etc/wait-for-db/scan-dbs.sh; do sleep 1; done"]})
+                      (lk/add-files-to-container :wait-for-db :scan-dbs "/etc/wait-for-db"
+                                                 {"scan-dbs.sh" "for i in $(seq 0 3); do nc -z mdb-es-$i.mariadb-event-store 3306; done"})
                       ;; For the purpose of the test, we need to
                       ;; provide persistent volumes to be used by the
                       ;; database instances.
