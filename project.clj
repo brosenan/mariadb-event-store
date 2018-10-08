@@ -10,7 +10,7 @@
                  [org.mariadb.jdbc/mariadb-java-client "2.3.0"]
                  [com.taoensso/nippy "2.14.0"]
                  [pandect "0.6.1"]
-                 [brosenan/lambdakube "0.9.2"]]
+                 [brosenan/lambdakube "0.9.3"]]
   :profiles {:dev {:dependencies [[midje "1.9.2"]]
                    :plugins [[lein-midje "3.2.1"]]}}
   :aot [mariadb-event-store.core mariadb-event-store.lk]
